@@ -29,6 +29,7 @@ import {
 import {
   getAllChats,
   getAllRegisteredGroups,
+  deleteSession,
   getAllSessions,
   getAllTasks,
   getMessagesSince,
@@ -574,6 +575,18 @@ async function main(): Promise<void> {
       isGroup?: boolean,
     ) => storeChatMetadata(chatJid, timestamp, name, channel, isGroup),
     registeredGroups: () => registeredGroups,
+    onClearContext: (chatJid: string) => {
+      lastAgentTimestamp[chatJid] = new Date().toISOString();
+      const group = registeredGroups[chatJid];
+      if (group) {
+        delete sessions[group.folder];
+        deleteSession(group.folder);
+      }
+      saveState();
+      // Close any active container so the next message starts with a fresh session
+      queue.closeStdin(chatJid);
+      logger.info({ chatJid }, 'Context cleared via /clear command');
+    },
   };
 
   // Create and connect all registered channels.
