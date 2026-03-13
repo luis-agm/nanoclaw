@@ -919,6 +919,64 @@ describe('TelegramChannel', () => {
 
       expect(ctx.reply).toHaveBeenCalledWith('Andy is online.');
     });
+
+    it('/compact stores a /compact message for the main channel', async () => {
+      const opts = createTestOpts({
+        registeredGroups: vi.fn(() => ({
+          'tg:100200300': {
+            name: 'Main',
+            folder: 'main',
+            trigger: '@Andy',
+            isMain: true,
+            added_at: '2024-01-01T00:00:00.000Z',
+          },
+        })),
+      });
+      const channel = new TelegramChannel('test-token', opts);
+      await channel.connect();
+
+      const handler = currentBot().commandHandlers.get('compact')!;
+      const ctx = {
+        chat: { id: 100200300, type: 'private' as const },
+        from: { id: 99001, first_name: 'Luis', username: 'luis' },
+        message: { message_id: 42, date: 1704067200 },
+        reply: vi.fn(),
+      };
+
+      await handler(ctx);
+
+      expect(opts.onMessage).toHaveBeenCalledWith(
+        'tg:100200300',
+        expect.objectContaining({
+          id: '42',
+          chat_jid: 'tg:100200300',
+          content: '/compact',
+          is_from_me: false,
+        }),
+      );
+      expect(ctx.reply).not.toHaveBeenCalled();
+    });
+
+    it('/compact replies with denial for non-main channel', async () => {
+      const opts = createTestOpts();
+      const channel = new TelegramChannel('test-token', opts);
+      await channel.connect();
+
+      const handler = currentBot().commandHandlers.get('compact')!;
+      const ctx = {
+        chat: { id: 100200300, type: 'group' as const },
+        from: { id: 99001, first_name: 'Alice' },
+        message: { message_id: 1, date: 1704067200 },
+        reply: vi.fn(),
+      };
+
+      await handler(ctx);
+
+      expect(ctx.reply).toHaveBeenCalledWith(
+        'This command is only available in the main channel.',
+      );
+      expect(opts.onMessage).not.toHaveBeenCalled();
+    });
   });
 
   // --- Channel properties ---

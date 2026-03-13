@@ -53,6 +53,27 @@ export class TelegramChannel implements Channel {
       ctx.reply(`${ASSISTANT_NAME} is online.`);
     });
 
+    // Command to compact conversation history (main channel only)
+    this.bot.command('compact', (ctx) => {
+      const chatJid = `tg:${ctx.chat.id}`;
+      const group = this.opts.registeredGroups()[chatJid];
+      if (!group?.isMain) {
+        ctx.reply('This command is only available in the main channel.');
+        return;
+      }
+      if (!ctx.message) return;
+      const timestamp = new Date(ctx.message.date * 1000).toISOString();
+      this.opts.onMessage(chatJid, {
+        id: ctx.message.message_id.toString(),
+        chat_jid: chatJid,
+        sender: ctx.from?.id.toString() || '',
+        sender_name: ctx.from?.first_name || ctx.from?.username || 'Unknown',
+        content: '/compact',
+        timestamp,
+        is_from_me: false,
+      });
+    });
+
     // Command to start a fresh conversation (main channel only)
     this.bot.command('clear', (ctx) => {
       const chatJid = `tg:${ctx.chat.id}`;
