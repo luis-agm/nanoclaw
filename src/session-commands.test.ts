@@ -39,6 +39,18 @@ describe('extractSessionCommand', () => {
   it('is case-sensitive for the command', () => {
     expect(extractSessionCommand('/Compact', trigger)).toBeNull();
   });
+
+  it('detects bare /clear', () => {
+    expect(extractSessionCommand('/clear', trigger)).toBe('/clear');
+  });
+
+  it('detects /clear with trigger prefix', () => {
+    expect(extractSessionCommand('@Andy /clear', trigger)).toBe('/clear');
+  });
+
+  it('rejects /clear with extra text', () => {
+    expect(extractSessionCommand('/clear everything', trigger)).toBeNull();
+  });
 });
 
 describe('isSessionCommandAllowed', () => {
@@ -85,6 +97,7 @@ function makeDeps(
     advanceCursor: vi.fn(),
     formatMessages: vi.fn().mockReturnValue('<formatted>'),
     canSenderInteract: vi.fn().mockReturnValue(true),
+    clearContext: vi.fn(),
     ...overrides,
   };
 }
@@ -243,5 +256,76 @@ describe('handleSessionCommand', () => {
     expect(deps.sendMessage).toHaveBeenCalledWith(
       expect.stringContaining('Failed to process'),
     );
+  });
+
+  it('handles authorized /clear in main group', async () => {
+    const deps = makeDeps();
+    const result = await handleSessionCommand({
+      missedMessages: [makeMsg('/clear')],
+      isMainGroup: true,
+      groupName: 'test',
+      triggerPattern: trigger,
+      timezone: 'UTC',
+      deps,
+    });
+    expect(result).toEqual({ handled: true, success: true });
+    expect(deps.clearContext).toHaveBeenCalledOnce();
+    expect(deps.sendMessage).toHaveBeenCalledWith(
+      'Context cleared. Starting fresh conversation.',
+    );
+    expect(deps.advanceCursor).toHaveBeenCalledWith('100');
+    expect(deps.runAgent).not.toHaveBeenCalled();
+  });
+
+  it('does not process pre-clear messages through runAgent', async () => {
+    const deps = makeDeps();
+    const msgs = [
+      makeMsg('some message', { timestamp: '99' }),
+      makeMsg('/clear', { timestamp: '100' }),
+    ];
+    const result = await handleSessionCommand({
+      missedMessages: msgs,
+      isMainGroup: true,
+      groupName: 'test',
+      triggerPattern: trigger,
+      timezone: 'UTC',
+      deps,
+    });
+    expect(result).toEqual({ handled: true, success: true });
+    expect(deps.runAgent).not.toHaveBeenCalled();
+    expect(deps.clearContext).toHaveBeenCalledOnce();
+  });
+
+  it('denies /clear in non-main group (non-me sender)', async () => {
+    const deps = makeDeps();
+    const result = await handleSessionCommand({
+      missedMessages: [makeMsg('/clear', { is_from_me: false })],
+      isMainGroup: false,
+      groupName: 'test',
+      triggerPattern: trigger,
+      timezone: 'UTC',
+      deps,
+    });
+    expect(result).toEqual({ handled: true, success: true });
+    expect(deps.sendMessage).toHaveBeenCalledWith(
+      'Session commands require admin access.',
+    );
+    expect(deps.clearContext).not.toHaveBeenCalled();
+    expect(deps.advanceCursor).toHaveBeenCalledWith('100');
+  });
+
+  it('allows /clear via is_from_me in non-main group', async () => {
+    const deps = makeDeps();
+    const result = await handleSessionCommand({
+      missedMessages: [makeMsg('/clear', { is_from_me: true })],
+      isMainGroup: false,
+      groupName: 'test',
+      triggerPattern: trigger,
+      timezone: 'UTC',
+      deps,
+    });
+    expect(result).toEqual({ handled: true, success: true });
+    expect(deps.clearContext).toHaveBeenCalledOnce();
+    expect(deps.runAgent).not.toHaveBeenCalled();
   });
 });

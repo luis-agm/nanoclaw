@@ -15,7 +15,6 @@ export interface TelegramChannelOpts {
   onMessage: OnInboundMessage;
   onChatMetadata: OnChatMetadata;
   registeredGroups: () => Record<string, RegisteredGroup>;
-  onClearContext?: (chatJid: string) => void;
 }
 
 export class TelegramChannel implements Channel {
@@ -53,14 +52,11 @@ export class TelegramChannel implements Channel {
       ctx.reply(`${ASSISTANT_NAME} is online.`);
     });
 
-    // Command to compact conversation history (main channel only)
+    // Command to compact conversation history
     this.bot.command('compact', (ctx) => {
       const chatJid = `tg:${ctx.chat.id}`;
       const group = this.opts.registeredGroups()[chatJid];
-      if (!group?.isMain) {
-        ctx.reply('This command is only available in the main channel.');
-        return;
-      }
+      if (!group) return;
       if (!ctx.message) return;
       const timestamp = new Date(ctx.message.date * 1000).toISOString();
       this.opts.onMessage(chatJid, {
@@ -74,16 +70,22 @@ export class TelegramChannel implements Channel {
       });
     });
 
-    // Command to start a fresh conversation (main channel only)
+    // Command to start a fresh conversation
     this.bot.command('clear', (ctx) => {
       const chatJid = `tg:${ctx.chat.id}`;
       const group = this.opts.registeredGroups()[chatJid];
-      if (!group?.isMain) {
-        ctx.reply('This command is only available in the main channel.');
-        return;
-      }
-      this.opts.onClearContext?.(chatJid);
-      ctx.reply('Context cleared. Starting fresh conversation.');
+      if (!group) return;
+      if (!ctx.message) return;
+      const timestamp = new Date(ctx.message.date * 1000).toISOString();
+      this.opts.onMessage(chatJid, {
+        id: ctx.message.message_id.toString(),
+        chat_jid: chatJid,
+        sender: ctx.from?.id.toString() || '',
+        sender_name: ctx.from?.first_name || ctx.from?.username || 'Unknown',
+        content: '/clear',
+        timestamp,
+        is_from_me: false,
+      });
     });
 
     this.bot.on('message:text', async (ctx) => {

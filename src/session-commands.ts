@@ -12,6 +12,7 @@ export function extractSessionCommand(
   let text = content.trim();
   text = text.replace(triggerPattern, '').trim();
   if (text === '/compact') return '/compact';
+  if (text === '/clear') return '/clear';
   return null;
 }
 
@@ -45,6 +46,7 @@ export interface SessionCommandDeps {
   formatMessages: (msgs: NewMessage[], timezone: string) => string;
   /** Whether the denied sender would normally be allowed to interact (for denial messages). */
   canSenderInteract: (msg: NewMessage) => boolean;
+  clearContext: () => void;
 }
 
 function resultToText(result: string | object | null | undefined): string {
@@ -97,9 +99,17 @@ export async function handleSessionCommand(opts: {
     return { handled: true, success: true };
   }
 
-  // AUTHORIZED: process pre-compact messages first, then run the command
+  // AUTHORIZED: dispatch on command
   logger.info({ group: groupName, command }, 'Session command');
 
+  if (command === '/clear') {
+    deps.clearContext();
+    await deps.sendMessage('Context cleared. Starting fresh conversation.');
+    deps.advanceCursor(cmdMsg.timestamp);
+    return { handled: true, success: true };
+  }
+
+  // /compact: process pre-compact messages first, then run the command
   const cmdIndex = missedMessages.indexOf(cmdMsg);
   const preCompactMsgs = missedMessages.slice(0, cmdIndex);
 

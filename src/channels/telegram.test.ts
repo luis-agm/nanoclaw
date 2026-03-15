@@ -957,7 +957,7 @@ describe('TelegramChannel', () => {
       expect(ctx.reply).not.toHaveBeenCalled();
     });
 
-    it('/compact replies with denial for non-main channel', async () => {
+    it('/compact stores message for a registered non-main channel', async () => {
       const opts = createTestOpts();
       const channel = new TelegramChannel('test-token', opts);
       await channel.connect();
@@ -966,16 +966,86 @@ describe('TelegramChannel', () => {
       const ctx = {
         chat: { id: 100200300, type: 'group' as const },
         from: { id: 99001, first_name: 'Alice' },
+        message: { message_id: 5, date: 1704067200 },
+        reply: vi.fn(),
+      };
+
+      await handler(ctx);
+
+      expect(opts.onMessage).toHaveBeenCalledWith(
+        'tg:100200300',
+        expect.objectContaining({ content: '/compact' }),
+      );
+      expect(ctx.reply).not.toHaveBeenCalled();
+    });
+
+    it('/compact does nothing for unregistered group', async () => {
+      const opts = createTestOpts({
+        registeredGroups: vi.fn(() => ({})),
+      });
+      const channel = new TelegramChannel('test-token', opts);
+      await channel.connect();
+
+      const handler = currentBot().commandHandlers.get('compact')!;
+      const ctx = {
+        chat: { id: 999, type: 'group' as const },
+        from: { id: 1, first_name: 'Eve' },
         message: { message_id: 1, date: 1704067200 },
         reply: vi.fn(),
       };
 
       await handler(ctx);
 
-      expect(ctx.reply).toHaveBeenCalledWith(
-        'This command is only available in the main channel.',
-      );
       expect(opts.onMessage).not.toHaveBeenCalled();
+      expect(ctx.reply).not.toHaveBeenCalled();
+    });
+
+    it('/clear stores a /clear message for a registered channel', async () => {
+      const opts = createTestOpts();
+      const channel = new TelegramChannel('test-token', opts);
+      await channel.connect();
+
+      const handler = currentBot().commandHandlers.get('clear')!;
+      const ctx = {
+        chat: { id: 100200300, type: 'group' as const },
+        from: { id: 99001, first_name: 'Alice' },
+        message: { message_id: 7, date: 1704067200 },
+        reply: vi.fn(),
+      };
+
+      await handler(ctx);
+
+      expect(opts.onMessage).toHaveBeenCalledWith(
+        'tg:100200300',
+        expect.objectContaining({
+          id: '7',
+          chat_jid: 'tg:100200300',
+          content: '/clear',
+          is_from_me: false,
+        }),
+      );
+      expect(ctx.reply).not.toHaveBeenCalled();
+    });
+
+    it('/clear does nothing for unregistered group', async () => {
+      const opts = createTestOpts({
+        registeredGroups: vi.fn(() => ({})),
+      });
+      const channel = new TelegramChannel('test-token', opts);
+      await channel.connect();
+
+      const handler = currentBot().commandHandlers.get('clear')!;
+      const ctx = {
+        chat: { id: 999, type: 'group' as const },
+        from: { id: 1, first_name: 'Eve' },
+        message: { message_id: 1, date: 1704067200 },
+        reply: vi.fn(),
+      };
+
+      await handler(ctx);
+
+      expect(opts.onMessage).not.toHaveBeenCalled();
+      expect(ctx.reply).not.toHaveBeenCalled();
     });
   });
 
