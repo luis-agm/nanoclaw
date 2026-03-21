@@ -16,6 +16,9 @@ import {
   IDLE_TIMEOUT,
   TIMEZONE,
 } from './config.js';
+
+const SSH_DIR = path.join(DATA_DIR, 'ssh');
+const GIT_CONFIG_FILE = path.join(DATA_DIR, 'gitconfig');
 import { readEnvFile } from './env.js';
 import { resolveGroupFolderPath, resolveGroupIpcPath } from './group-folder.js';
 import { logger } from './logger.js';
@@ -207,6 +210,14 @@ function buildVolumeMounts(
     containerPath: '/app/src',
     readonly: false,
   });
+
+  // SSH keys and git config — infrastructure mounts, always present if the dirs exist
+  if (fs.existsSync(SSH_DIR)) {
+    mounts.push({ hostPath: SSH_DIR, containerPath: '/home/node/.ssh', readonly: true });
+  }
+  if (fs.existsSync(GIT_CONFIG_FILE)) {
+    mounts.push({ hostPath: GIT_CONFIG_FILE, containerPath: '/home/node/.gitconfig', readonly: true });
+  }
 
   // Additional mounts validated against external allowlist (tamper-proof from containers)
   if (group.containerConfig?.additionalMounts) {

@@ -33,6 +33,10 @@ Single Node.js process with skill-based channel system. Channels (WhatsApp, Tele
 | `/qodo-pr-resolver` | Fetch and fix Qodo PR review issues interactively or in batch |
 | `/get-qodo-rules` | Load org- and repo-level coding rules from Qodo before code tasks |
 
+## Security
+
+Never read, grep, cat, or otherwise access `.env` or any file likely to contain secrets (e.g. `*.pem`, `*credentials*`, `*secret*`). If you need to know whether a key exists, ask the user.
+
 ## Development
 
 Run commands directly—don't tell the user to run them.
