@@ -99,29 +99,18 @@ function buildVolumeMounts(
       });
     }
 
-    // Shadow sensitive paths inside the project root so the agent
-    // cannot read them even though the parent directory is mounted.
+    // Shadow the entire data/ directory from the project root mount.
+    // Everything the agent needs from data/ is already mounted at
+    // specific paths (/home/node/.ssh, /home/node/.claude, /workspace/ipc).
+    // Exposing data/ via /workspace/project/data/ is redundant and leaks
+    // sensitive content (SSH keys, env copies, session transcripts).
     const shadowDir = path.join(DATA_DIR, '.shadow');
     fs.mkdirSync(shadowDir, { recursive: true });
-
-    for (const sensitive of ['data/env', 'data/ssh']) {
-      const hostPath = path.join(projectRoot, sensitive);
-      if (!fs.existsSync(hostPath)) continue;
-      const stat = fs.statSync(hostPath);
-      if (stat.isDirectory()) {
-        mounts.push({
-          hostPath: shadowDir,
-          containerPath: `/workspace/project/${sensitive}`,
-          readonly: true,
-        });
-      } else {
-        mounts.push({
-          hostPath: '/dev/null',
-          containerPath: `/workspace/project/${sensitive}`,
-          readonly: true,
-        });
-      }
-    }
+    mounts.push({
+      hostPath: shadowDir,
+      containerPath: '/workspace/project/data',
+      readonly: true,
+    });
 
     // Main also gets its group folder as the working directory
     mounts.push({
@@ -188,9 +177,14 @@ function buildVolumeMounts(
   } catch {
     // File doesn't exist or is invalid — start fresh
   }
-  settings.env = { ...(settings.env as Record<string, string> || {}), ...requiredEnv };
+  settings.env = {
+    ...((settings.env as Record<string, string>) || {}),
+    ...requiredEnv,
+  };
   const perms = (settings.permissions || {}) as Record<string, unknown>;
-  const existingDeny = Array.isArray(perms.deny) ? perms.deny as string[] : [];
+  const existingDeny = Array.isArray(perms.deny)
+    ? (perms.deny as string[])
+    : [];
   const denySet = new Set([...existingDeny, ...requiredDenyRules]);
   perms.deny = [...denySet];
   settings.permissions = perms;
