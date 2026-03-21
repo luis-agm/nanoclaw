@@ -19,9 +19,16 @@ Single Node.js process with skill-based channel system. Channels (WhatsApp, Tele
 | `src/task-scheduler.ts` | Runs scheduled tasks |
 | `src/db.ts` | SQLite operations |
 | `groups/{name}/CLAUDE.md` | Per-group memory (isolated) |
-| `container/skills/agent-browser.md` | Browser automation tool (available to all agents via Bash) |
+| `container/skills/` | Skills loaded inside agent containers (browser, status, formatting) |
 
 ## Skills
+
+Four types of skills exist in NanoClaw. See [CONTRIBUTING.md](CONTRIBUTING.md) for the full taxonomy and guidelines.
+
+- **Feature skills** — merge a `skill/*` branch to add capabilities (e.g. `/add-telegram`, `/add-slack`)
+- **Utility skills** — ship code files alongside SKILL.md (e.g. `/claw`)
+- **Operational skills** — instruction-only workflows, always on `main` (e.g. `/setup`, `/debug`)
+- **Container skills** — loaded inside agent containers at runtime (`container/skills/`)
 
 | Skill | When to Use |
 |-------|-------------|
@@ -36,6 +43,10 @@ Single Node.js process with skill-based channel system. Channels (WhatsApp, Tele
 ## Security
 
 Never read, grep, cat, or otherwise access `.env` or any file likely to contain secrets (e.g. `*.pem`, `*credentials*`, `*secret*`). If you need to know whether a key exists, ask the user.
+
+## Contributing
+
+Before creating a PR, adding a skill, or preparing any contribution, you MUST read [CONTRIBUTING.md](CONTRIBUTING.md). It covers accepted change types, the four skill types and their guidelines, SKILL.md format rules, PR requirements, and the pre-submission checklist (searching for existing PRs/issues, testing, description format).
 
 ## Development
 
@@ -62,7 +73,7 @@ systemctl --user restart nanoclaw
 
 ## Troubleshooting
 
-**WhatsApp not connecting after upgrade:** WhatsApp is now a separate channel fork, not bundled in core. Run `/add-whatsapp` (or `git remote add whatsapp https://github.com/qwibitai/nanoclaw-whatsapp.git && git fetch whatsapp main && (git merge whatsapp/main || { git checkout --theirs package-lock.json && git add package-lock.json && git merge --continue; }) && npm run build`) to install it. Existing auth credentials and groups are preserved.
+**WhatsApp not connecting after upgrade:** WhatsApp is now a separate skill, not bundled in core. Run `/add-whatsapp` (or `npx tsx scripts/apply-skill.ts .claude/skills/add-whatsapp && npm run build`) to install it. Existing auth credentials and groups are preserved.
 
 ## Container Build Cache
 
