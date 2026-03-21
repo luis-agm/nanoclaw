@@ -16,6 +16,7 @@ import {
   IDLE_TIMEOUT,
   TIMEZONE,
 } from './config.js';
+import { readEnvFile } from './env.js';
 import { resolveGroupFolderPath, resolveGroupIpcPath } from './group-folder.js';
 import { logger } from './logger.js';
 import {
@@ -41,6 +42,14 @@ export interface ContainerInput {
   isMain: boolean;
   isScheduledTask?: boolean;
   assistantName?: string;
+  secrets?: Record<string, string>;
+}
+
+// Reads third-party API tokens from .env to pass to containers via stdin.
+// Secrets travel as JSON on stdin (not -e flags) so they never appear in
+// docker inspect output or /proc/*/environ.
+function readSecrets(): Record<string, string> {
+  return readEnvFile(['GITLAB_TOKEN', 'GITLAB_HOST', 'GL_REPO']);
 }
 
 export interface ContainerOutput {
@@ -318,8 +327,10 @@ export async function runContainerAgent(
     let stdoutTruncated = false;
     let stderrTruncated = false;
 
+    input.secrets = readSecrets();
     container.stdin.write(JSON.stringify(input));
     container.stdin.end();
+    delete input.secrets; // Remove before logging so tokens don't appear in logs
 
     // Streaming output: parse OUTPUT_START/END marker pairs as they arrive
     let parseBuffer = '';
