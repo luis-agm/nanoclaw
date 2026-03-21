@@ -99,6 +99,28 @@ function buildVolumeMounts(
       });
     }
 
+    // Shadow data/env (legacy secrets directory) to prevent container access.
+    // Some setup flows copied .env to data/env/env; block that path defensively.
+    const dataEnvPath = path.join(projectRoot, 'data', 'env');
+    if (fs.existsSync(dataEnvPath)) {
+      const dataEnvStat = fs.statSync(dataEnvPath);
+      if (dataEnvStat.isDirectory()) {
+        const shadowDir = path.join(DATA_DIR, '.env-shadow');
+        fs.mkdirSync(shadowDir, { recursive: true });
+        mounts.push({
+          hostPath: shadowDir,
+          containerPath: '/workspace/project/data/env',
+          readonly: true,
+        });
+      } else {
+        mounts.push({
+          hostPath: '/dev/null',
+          containerPath: '/workspace/project/data/env',
+          readonly: true,
+        });
+      }
+    }
+
     // Main also gets its group folder as the working directory
     mounts.push({
       hostPath: groupDir,
