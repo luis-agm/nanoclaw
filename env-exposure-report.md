@@ -44,8 +44,9 @@ Everything in `.env` was readable by the main-group container agent at `/workspa
 
 1. **Deleted `data/env/`** — removed the exposed secrets copy
 2. **Deleted stale `agent-runner-src/`** — forces fresh copy with working secrets-merging code on next container start
-3. **Added shadow mount** for `data/env` in `buildVolumeMounts()` (`container-runner.ts`) — if the directory is ever recreated, the container sees an empty directory instead
-4. **Rebuilt and restarted** the service
+3. **Added shadow mounts** for `data/env` and `data/ssh` in `buildVolumeMounts()` (`container-runner.ts`) — if either directory is recreated, the container sees an empty directory instead. `data/ssh` was also redundantly exposed at `/workspace/project/data/ssh/` despite already being mounted at `/home/node/.ssh`
+4. **Added deny rules to container `settings.json`** — `Read(**/.env)`, `Read(**.pem)`, `Read(**credentials**)`, `Read(**secret**)`, and explicit rules for `/workspace/project/data/env/**` and `/workspace/project/data/ssh/**`. These are merged on every container start (not just first creation) so existing groups receive them
+5. **Rebuilt and restarted** the service
 
 ## Recommended Upstream Fixes
 
@@ -54,7 +55,7 @@ Everything in `.env` was readable by the main-group container agent at `/workspa
    - `add-voice-transcription`, `add-telegram-swarm`
    - `debug` (architecture diagram, manual testing commands, diagnostic script)
 
-2. **Merge the shadow mount** for `data/env` into `container-runner.ts` (defensive, in case old skill instructions are followed)
+2. **Merge the shadow mounts and deny rules** into `container-runner.ts` — shadow mounts for `data/env` and `data/ssh`, plus container-side Claude Code deny rules (see remediation steps 3–4 above)
 
 3. **Fix the stale agent-runner-src problem** — the one-time copy logic (`if (!fs.existsSync(dir))`) means code updates to `container/agent-runner/src/` never propagate to existing groups. Consider either:
    - Always overwriting the copy (simple, but breaks per-group customizations)

@@ -99,23 +99,25 @@ function buildVolumeMounts(
       });
     }
 
-    // Shadow data/env (legacy secrets directory) to prevent container access.
-    // Some setup flows copied .env to data/env/env; block that path defensively.
-    const dataEnvPath = path.join(projectRoot, 'data', 'env');
-    if (fs.existsSync(dataEnvPath)) {
-      const dataEnvStat = fs.statSync(dataEnvPath);
-      if (dataEnvStat.isDirectory()) {
-        const shadowDir = path.join(DATA_DIR, '.env-shadow');
-        fs.mkdirSync(shadowDir, { recursive: true });
+    // Shadow sensitive paths inside the project root so the agent
+    // cannot read them even though the parent directory is mounted.
+    const shadowDir = path.join(DATA_DIR, '.shadow');
+    fs.mkdirSync(shadowDir, { recursive: true });
+
+    for (const sensitive of ['data/env', 'data/ssh']) {
+      const hostPath = path.join(projectRoot, sensitive);
+      if (!fs.existsSync(hostPath)) continue;
+      const stat = fs.statSync(hostPath);
+      if (stat.isDirectory()) {
         mounts.push({
           hostPath: shadowDir,
-          containerPath: '/workspace/project/data/env',
+          containerPath: `/workspace/project/${sensitive}`,
           readonly: true,
         });
       } else {
         mounts.push({
           hostPath: '/dev/null',
-          containerPath: '/workspace/project/data/env',
+          containerPath: `/workspace/project/${sensitive}`,
           readonly: true,
         });
       }
@@ -156,29 +158,43 @@ function buildVolumeMounts(
     '.claude',
   );
   fs.mkdirSync(groupSessionsDir, { recursive: true });
+  // Required env vars for all container agents:
+  // - Agent swarms: https://code.claude.com/docs/en/agent-teams#orchestrate-teams-of-claude-code-sessions
+  // - Additional CLAUDE.md: https://code.claude.com/docs/en/memory#load-memory-from-additional-directories
+  // - Auto-memory: https://code.claude.com/docs/en/memory#manage-auto-memory
+  const requiredEnv: Record<string, string> = {
+    CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS: '1',
+    CLAUDE_CODE_ADDITIONAL_DIRECTORIES_CLAUDE_MD: '1',
+    CLAUDE_CODE_DISABLE_AUTO_MEMORY: '0',
+  };
+
+  // Deny rules prevent the container agent from reading secrets via Claude Code
+  // tools (Read, Grep, etc.). Not a hard boundary (Bash can bypass), but stops
+  // the model from casually accessing sensitive files through normal tool use.
+  const requiredDenyRules = [
+    'Read(**/.env)',
+    'Read(**.pem)',
+    'Read(**credentials**)',
+    'Read(**secret**)',
+    'Read(/workspace/project/data/env/**)',
+    'Read(/workspace/project/data/ssh/**)',
+  ];
+
+  // Always merge required settings so deny rules propagate to existing groups.
   const settingsFile = path.join(groupSessionsDir, 'settings.json');
-  if (!fs.existsSync(settingsFile)) {
-    fs.writeFileSync(
-      settingsFile,
-      JSON.stringify(
-        {
-          env: {
-            // Enable agent swarms (subagent orchestration)
-            // https://code.claude.com/docs/en/agent-teams#orchestrate-teams-of-claude-code-sessions
-            CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS: '1',
-            // Load CLAUDE.md from additional mounted directories
-            // https://code.claude.com/docs/en/memory#load-memory-from-additional-directories
-            CLAUDE_CODE_ADDITIONAL_DIRECTORIES_CLAUDE_MD: '1',
-            // Enable Claude's memory feature (persists user preferences between sessions)
-            // https://code.claude.com/docs/en/memory#manage-auto-memory
-            CLAUDE_CODE_DISABLE_AUTO_MEMORY: '0',
-          },
-        },
-        null,
-        2,
-      ) + '\n',
-    );
+  let settings: Record<string, unknown> = {};
+  try {
+    settings = JSON.parse(fs.readFileSync(settingsFile, 'utf-8'));
+  } catch {
+    // File doesn't exist or is invalid — start fresh
   }
+  settings.env = { ...(settings.env as Record<string, string> || {}), ...requiredEnv };
+  const perms = (settings.permissions || {}) as Record<string, unknown>;
+  const existingDeny = Array.isArray(perms.deny) ? perms.deny as string[] : [];
+  const denySet = new Set([...existingDeny, ...requiredDenyRules]);
+  perms.deny = [...denySet];
+  settings.permissions = perms;
+  fs.writeFileSync(settingsFile, JSON.stringify(settings, null, 2) + '\n');
 
   // Sync skills from container/skills/ into each group's .claude/skills/
   const skillsSrc = path.join(process.cwd(), 'container', 'skills');
