@@ -1,7 +1,9 @@
 # NanoClaw Agent Container
 # Runs Claude Agent SDK in isolated Linux VM with browser automation
 
-FROM node:22-slim
+FROM oven/bun:latest AS bun-source
+
+FROM node:24-slim
 
 # Install system dependencies for Chromium
 RUN apt-get update && apt-get install -y \
@@ -26,8 +28,10 @@ RUN apt-get update && apt-get install -y \
     git \
     && rm -rf /var/lib/apt/lists/*
 
-# Install GitLab CLI (glab)
-RUN curl -fsSL "https://gitlab.com/gitlab-org/cli/-/releases/permalink/latest/downloads/glab_linux_amd64.deb" \
+# Install GitLab CLI (glab) — resolve latest version via API
+RUN GLAB_VERSION=$(curl -sfL "https://gitlab.com/api/v4/projects/gitlab-org%2Fcli/releases?per_page=1" \
+      | grep -o '"tag_name":"[^"]*"' | head -1 | cut -d'"' -f4 | sed 's/^v//') \
+    && curl -fsSL "https://gitlab.com/gitlab-org/cli/-/releases/v${GLAB_VERSION}/downloads/glab_${GLAB_VERSION}_linux_amd64.deb" \
       -o /tmp/glab.deb \
     && apt-get install -y /tmp/glab.deb \
     && rm /tmp/glab.deb
@@ -35,6 +39,9 @@ RUN curl -fsSL "https://gitlab.com/gitlab-org/cli/-/releases/permalink/latest/do
 # Set Chromium path for agent-browser
 ENV AGENT_BROWSER_EXECUTABLE_PATH=/usr/bin/chromium
 ENV PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH=/usr/bin/chromium
+
+# Install Bun from official image
+COPY --from=bun-source /usr/local/bin/bun /usr/local/bin/bun
 
 # Install agent-browser and claude-code globally
 RUN npm install -g agent-browser @anthropic-ai/claude-code
