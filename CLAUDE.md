@@ -44,6 +44,38 @@ Four types of skills exist in NanoClaw. See [CONTRIBUTING.md](CONTRIBUTING.md) f
 
 Never read, grep, cat, or otherwise access `.env` or any file likely to contain secrets (e.g. `*.pem`, `*credentials*`, `*secret*`). If you need to know whether a key exists, ask the user.
 
+## Secrets & Credentials
+
+Secrets in this NanoClaw instance are handled non-standardly — do NOT assume env vars.
+
+### Storage
+All secrets live in the host `.env` file (project root). **The agent must never read,
+write, or touch the `.env` file in any way.** If a new secret needs to be added, the
+agent must ask the user to add it manually and wait for the user to confirm it is done
+before proceeding.
+
+### How they reach containers
+1. `readSecrets()` in `src/container-runner.ts` calls `readEnvFile()` with an explicit allowlist of keys
+2. The result is added to the container input and passed **via stdin as JSON** — never via `-e` flags or `process.env`
+3. The `.env` file is shadowed to `/dev/null` inside containers so agents cannot read it directly
+
+### Adding a new secret (agent workflow)
+1. **Tell the user** which key needs to be added to `.env` and what value to use
+2. **Wait for the user to confirm** they have added it — trust that it is done correctly
+3. Add the key name to the `readEnvFile([...])` call inside `readSecrets()` in `src/container-runner.ts`
+4. If needed for an MCP server, reference it in `.mcp.json` under `env: { "KEY": "${KEY}" }`
+
+### Credential proxy
+Anthropic API credentials are handled separately by `src/credential-proxy.ts`, which intercepts
+container API calls and injects real credentials. Containers only ever see placeholder tokens.
+
+### Relevant files
+- `src/env.ts` — `readEnvFile()` implementation
+- `src/container-runner.ts` — `readSecrets()` and stdin injection
+- `src/credential-proxy.ts` — Anthropic credential proxy
+- `.mcp.json` — MCP server registrations (currently empty)
+- `src/mount-security.ts` — blocked mount patterns
+
 ## Contributing
 
 Before creating a PR, adding a skill, or preparing any contribution, you MUST read [CONTRIBUTING.md](CONTRIBUTING.md). It covers accepted change types, the four skill types and their guidelines, SKILL.md format rules, PR requirements, and the pre-submission checklist (searching for existing PRs/issues, testing, description format).
